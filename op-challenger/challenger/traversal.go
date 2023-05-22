@@ -190,6 +190,8 @@ func (l *logTraversal) dispatchNewHead(ctx context.Context, header *types.Header
 			l.log.Warn("missed block detected, but catchup disabled")
 		}
 	}
+	// Update the block number before doing network calls
+	l.lastBlockNumber = *block.Number()
 	receipts, err := l.fetchTransactionReceipts(ctx, block.Transactions())
 	if err != nil {
 		l.log.Error("failed to fetch receipts", "err", err)
