@@ -1,0 +1,43 @@
+name: Deploy Periphery Contracts
+
+env:
+  PRIVATE_KEY: ${{ secrets.PERIPHERY_CHUGSPLASH_PRIVATE_KEY }}
+  IPFS_PROJECT_ID: ${{ secrets.IPFS_PROJECT_ID }}
+  IPFS_API_KEY_SECRET: ${{ secrets.IPFS_API_KEY_SECRET }}
+  CHUGSPLASH_API_KEY: ${{ secrets.CHUGSPLASH_API_KEY }}
+  ALCHEMY_API_KEY: ${{ secrets.ALCHEMY_API_KEY }}
+
+on: workflow_dispatch
+
+jobs:
+  chugsplash-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 16.x
+        uses: actions/setup-node@master
+        with:
+          node-version: 16.x
+
+      - name: Get yarn cache directory path
+        id: yarn-cache-dir-path
+        run: echo "::set-output name=dir::$(yarn cache dir)"
+
+      - uses: actions/cache@v2
+        id: yarn-cache
+        with:
+          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      - name: Install dependencies
+        run: yarn --frozen-lockfile
+
+      - name: Propose deployment
+        run: npx hardhat chugsplash-propose --config-path ./chugsplash/op-goerli.chugsplash.ts --network optimism-goerli --confirm
+        working-directory: packages/contracts-periphery
