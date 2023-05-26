@@ -2,54 +2,60 @@ package challenger
 
 import (
 	"context"
+	"errors"
 	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ethereum-optimism/optimism/op-service/backoff"
 )
 
+var (
+	ErrAlreadyStarted = errors.New("already started")
+)
+
+//go:generate mockery --name TraversalClient
+type TraversalClient interface {
+	SubscribeNewHead(ctx context.Context, ch chan<- *types.Header) (ethereum.Subscription, error)
+	TransactionReceipt(ctx context.Context, txHash common.Hash) (*types.Receipt, error)
+	BlockByHash(ctx context.Context, hash common.Hash) (*types.Block, error)
+	HeaderByNumber(ctx context.Context, number *big.Int) (*types.Header, error)
+}
+
 // LogTraversal is a client that can traverse all logs.
 type LogTraversal interface {
-	WithClient(client *ethclient.Client) LogTraversal
-	WithQuery(query *ethereum.FilterQuery) LogTraversal
 	Start(context.Context, chan struct{}, func(types.Log) error) error
-	Quit() error
+	Quit()
 }
 
 // logTraversal implements LogTraversal.
 type logTraversal struct {
 	log             log.Logger
-	client          *ethclient.Client
-	query           ethereum.FilterQuery
+	client          TraversalClient
+	query           *ethereum.FilterQuery
 	quit            chan struct{}
-	lastBlockNumber big.Int
+	lastBlockNumber *big.Int
+	started         bool
 }
 
 // NewLogTraversal creates a new log traversal.
-func NewLogTraversal() *logTraversal {
+func NewLogTraversal(client TraversalClient, query *ethereum.FilterQuery, log log.Logger) *logTraversal {
 	return &logTraversal{
-		client: nil,
-		query:  ethereum.FilterQuery{},
-		quit:   make(chan struct{}),
+		client:          client,
+		query:           query,
+		quit:            make(chan struct{}),
+		log:             log,
+		lastBlockNumber: big.NewInt(0),
 	}
 }
 
-// WithClient sets the client.
-func (l *logTraversal) WithClient(client *ethclient.Client) *logTraversal {
-	l.client = client
-	return l
-}
-
-// WithQuery sets the query.
-func (l *logTraversal) WithQuery(query *ethereum.FilterQuery) *logTraversal {
-	l.query = *query
-	return l
+// lastBlockNumber returns the last block number that was traversed.
+func (l *logTraversal) LastBlockNumber() *big.Int {
+	return l.lastBlockNumber
 }
 
 // buildBackoffStrategy builds a [backoff.Strategy].
@@ -98,8 +104,8 @@ func (l *logTraversal) fetchTransactionReceipts(ctx context.Context, txs []*type
 func (l *logTraversal) subscribeNewHead(ctx context.Context, headers chan *types.Header) (ethereum.Subscription, error) {
 	backoffStrategy := l.buildBackoffStrategy()
 	var sub ethereum.Subscription
-	err := backoff.DoCtx(ctx, 5, backoffStrategy, func() error {
-		ctx, cancel := context.WithTimeout(ctx, time.Second*10)
+	err := backoff.DoCtx(ctx, 4, backoffStrategy, func() error {
+		ctx, cancel := context.WithTimeout(ctx, time.Second*5)
 		defer cancel()
 		var err error
 		sub, err = l.client.SubscribeNewHead(ctx, headers)
@@ -110,6 +116,9 @@ func (l *logTraversal) subscribeNewHead(ctx context.Context, headers chan *types
 
 // Start starts the log traversal.
 func (l *logTraversal) Start(ctx context.Context, done chan struct{}, handleLog func(*types.Log) error) error {
+	if l.started {
+		return ErrAlreadyStarted
+	}
 	headers := make(chan *types.Header)
 	sub, err := l.subscribeNewHead(ctx, headers)
 	if err != nil {
@@ -118,7 +127,13 @@ func (l *logTraversal) Start(ctx context.Context, done chan struct{}, handleLog 
 	}
 	go l.onNewHead(ctx, headers, handleLog)
 	go l.unsubscribeOnDone(done, sub)
+	l.started = true
 	return nil
+}
+
+// Started returns true if the log traversal has started.
+func (l *logTraversal) Started() bool {
+	return l.started
 }
 
 // onNewHead handles a new [types.Header].
@@ -178,7 +193,7 @@ func (l *logTraversal) dispatchNewHead(ctx context.Context, header *types.Header
 		l.log.Error("failed to fetch block", "err", err)
 		return
 	}
-	expectedBlockNumber := l.lastBlockNumber.Add(&l.lastBlockNumber, big.NewInt(1))
+	expectedBlockNumber := l.lastBlockNumber.Add(l.lastBlockNumber, big.NewInt(1))
 	currentBlockNumber := block.Number()
 	if block.Number().Cmp(expectedBlockNumber) == 1 {
 		l.log.Warn("detected skipped block", "expectedBlockNumber", expectedBlockNumber, "currentBlockNumber", currentBlockNumber)
@@ -191,7 +206,7 @@ func (l *logTraversal) dispatchNewHead(ctx context.Context, header *types.Header
 		}
 	}
 	// Update the block number before doing network calls
-	l.lastBlockNumber = *block.Number()
+	l.lastBlockNumber = block.Number()
 	receipts, err := l.fetchTransactionReceipts(ctx, block.Transactions())
 	if err != nil {
 		l.log.Error("failed to fetch receipts", "err", err)
@@ -213,10 +228,11 @@ func (l *logTraversal) unsubscribeOnDone(done chan struct{}, sub ethereum.Subscr
 	<-done
 	l.log.Info("stopping log traversal: received done signal")
 	sub.Unsubscribe()
+	l.started = false
 }
 
 // Quit quits the log traversal.
-func (l *logTraversal) Quit() error {
+func (l *logTraversal) Quit() {
 	l.quit <- struct{}{}
-	return nil
+	l.started = false
 }
