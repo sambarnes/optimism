@@ -6,10 +6,7 @@ import (
 	"fmt"
 	"math/big"
 	_ "net/http/pprof"
-	"os"
-	"os/signal"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -26,6 +23,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-proposer/metrics"
 	opservice "github.com/ethereum-optimism/optimism/op-service"
 	opclient "github.com/ethereum-optimism/optimism/op-service/client"
+	opio "github.com/ethereum-optimism/optimism/op-service/io"
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
 	oppprof "github.com/ethereum-optimism/optimism/op-service/pprof"
 	oprpc "github.com/ethereum-optimism/optimism/op-service/rpc"
@@ -103,14 +101,7 @@ func Main(version string, cliCtx *cli.Context) error {
 	m.RecordInfo(version)
 	m.RecordUp()
 
-	interruptChannel := make(chan os.Signal, 1)
-	signal.Notify(interruptChannel, []os.Signal{
-		os.Interrupt,
-		os.Kill,
-		syscall.SIGTERM,
-		syscall.SIGQUIT,
-	}...)
-	<-interruptChannel
+	opio.BlockOnInterrupts()
 	cancel()
 
 	return nil
