@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	log "github.com/ethereum/go-ethereum/log"
@@ -59,7 +58,7 @@ func run(args []string, action ConfigAction) error {
 	app.Usage = "Challenge Invalid L2OutputOracle Outputs"
 	app.Description = "A modular op-stack challenge agent for dispute games written in golang."
 	app.Action = func(ctx *cli.Context) error {
-		logger, err := setupLogging(ctx)
+		logger, err := config.LoggerFromCLI(ctx)
 		if err != nil {
 			return err
 		}
@@ -79,13 +78,4 @@ func run(args []string, action ConfigAction) error {
 	}
 
 	return app.Run(args)
-}
-
-func setupLogging(ctx *cli.Context) (log.Logger, error) {
-	logCfg := oplog.ReadCLIConfig(ctx)
-	if err := logCfg.Check(); err != nil {
-		return nil, fmt.Errorf("log config error: %w", err)
-	}
-	logger := oplog.NewLogger(logCfg)
-	return logger, nil
 }
