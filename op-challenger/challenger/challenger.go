@@ -50,6 +50,16 @@ type Challenger struct {
 	networkTimeout time.Duration
 }
 
+// From returns the address of the account used to send transactions.
+func (c *Challenger) From() common.Address {
+	return c.txMgr.From()
+}
+
+// Client returns the client for the settlement layer.
+func (c *Challenger) Client() *ethclient.Client {
+	return c.l1Client
+}
+
 // NewChallenger creates a new Challenger
 func NewChallenger(cfg config.Config, l log.Logger, m metrics.Metricer) (*Challenger, error) {
 	ctx, cancel := context.WithCancel(context.Background())

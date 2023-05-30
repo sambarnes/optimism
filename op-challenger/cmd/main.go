@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"os"
 
-	challenger "github.com/ethereum-optimism/optimism/op-challenger/challenger"
+	log "github.com/ethereum/go-ethereum/log"
+	cli "github.com/urfave/cli"
+
+	watch "github.com/ethereum-optimism/optimism/op-challenger/cmd/watch"
 	config "github.com/ethereum-optimism/optimism/op-challenger/config"
 	flags "github.com/ethereum-optimism/optimism/op-challenger/flags"
 	version "github.com/ethereum-optimism/optimism/op-challenger/version"
-
-	log "github.com/ethereum/go-ethereum/log"
-	cli "github.com/urfave/cli"
 
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
 )
@@ -37,7 +37,7 @@ var VersionWithMeta = func() string {
 
 func main() {
 	args := os.Args
-	if err := run(args, challenger.Main); err != nil {
+	if err := run(args, Main); err != nil {
 		log.Crit("Application failed", "err", err)
 	}
 }
@@ -70,6 +70,12 @@ func run(args []string, action ConfigAction) error {
 			return err
 		}
 		return action(logger, VersionWithMeta, cfg)
+	}
+	app.Commands = []cli.Command{
+		{
+			Name:        "watch",
+			Subcommands: watch.Subcommands,
+		},
 	}
 
 	return app.Run(args)

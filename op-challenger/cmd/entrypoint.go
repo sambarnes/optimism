@@ -1,17 +1,18 @@
-package challenger
+package main
 
 import (
 	"context"
 	"fmt"
-	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/ethereum/go-ethereum/log"
 
-	"github.com/ethereum-optimism/optimism/op-challenger/config"
-	"github.com/ethereum-optimism/optimism/op-challenger/metrics"
+	challenger "github.com/ethereum-optimism/optimism/op-challenger/challenger"
+	config "github.com/ethereum-optimism/optimism/op-challenger/config"
+	metrics "github.com/ethereum-optimism/optimism/op-challenger/metrics"
+
 	oppprof "github.com/ethereum-optimism/optimism/op-service/pprof"
 	oprpc "github.com/ethereum-optimism/optimism/op-service/rpc"
 )
@@ -26,7 +27,7 @@ func Main(logger log.Logger, version string, cfg *config.Config) error {
 	m := metrics.NewMetrics("default")
 	logger.Info("Initializing Challenger")
 
-	challenger, err := NewChallenger(*cfg, logger, m)
+	service, err := challenger.NewChallenger(*cfg, logger, m)
 	if err != nil {
 		logger.Error("Unable to create the Challenger", "error", err)
 		return err
@@ -34,12 +35,12 @@ func Main(logger log.Logger, version string, cfg *config.Config) error {
 
 	logger.Info("Starting Challenger")
 	ctx, cancel := context.WithCancel(context.Background())
-	if err := challenger.Start(); err != nil {
+	if err := service.Start(); err != nil {
 		cancel()
 		logger.Error("Unable to start Challenger", "error", err)
 		return err
 	}
-	defer challenger.Stop()
+	defer service.Stop()
 
 	logger.Info("Challenger started")
 	pprofConfig := cfg.PprofConfig
@@ -60,7 +61,7 @@ func Main(logger log.Logger, version string, cfg *config.Config) error {
 				logger.Error("error starting metrics server", err)
 			}
 		}()
-		m.StartBalanceMetrics(ctx, logger, challenger.l1Client, challenger.txMgr.From())
+		m.StartBalanceMetrics(ctx, logger, service.Client(), service.From())
 	}
 
 	rpcCfg := cfg.RPCConfig
