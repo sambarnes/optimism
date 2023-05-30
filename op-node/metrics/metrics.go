@@ -132,15 +132,16 @@ type Metrics struct {
 	TransactionsSequencedTotal prometheus.Counter
 
 	// P2P Metrics
-	PeerCount         prometheus.Gauge
-	StreamCount       prometheus.Gauge
-	PeerScores        *prometheus.GaugeVec
-	GossipEventsTotal *prometheus.CounterVec
-	BandwidthTotal    *prometheus.GaugeVec
-	PeerUnbans        prometheus.Counter
-	IPUnbans          prometheus.Counter
-	Dials             *prometheus.CounterVec
-	Accepts           *prometheus.CounterVec
+	PeerCount          prometheus.Gauge
+	StreamCount        prometheus.Gauge
+	PeerScores         *prometheus.GaugeVec
+	GossipEventsTotal  *prometheus.CounterVec
+	BandwidthTotal     *prometheus.GaugeVec
+	PeerUnbans         prometheus.Counter
+	IPUnbans           prometheus.Counter
+	Dials              *prometheus.CounterVec
+	Accepts            *prometheus.CounterVec
+	PeerScoreHistogram *ReplaceableHistogramVec
 
 	ChannelInputBytes prometheus.Counter
 
@@ -161,6 +162,7 @@ func NewMetrics(procName string) *Metrics {
 	registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	registry.MustRegister(collectors.NewGoCollector())
 	factory := metrics.With(registry)
+
 	return &Metrics{
 		Info: factory.NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: ns,
@@ -321,6 +323,12 @@ func NewMetrics(procName string) *Metrics {
 		}, []string{
 			"band",
 		}),
+		PeerScoreHistogram: NewReplaceableHistogramVec(registry, prometheus.HistogramOpts{
+			Namespace: ns,
+			Name:      "peer_score_histogram",
+			Help:      "Histogram of currrently connected peer scores",
+			Buckets:   []float64{-100, -40, -20, -10, -5, -2, -1, -0.5, -0.05, 0, 0.05, 0.5, 1, 2, 5, 10, 20, 40},
+		}, []string{"type"}),
 		StreamCount: factory.NewGauge(prometheus.GaugeOpts{
 			Namespace: ns,
 			Subsystem: "p2p",
@@ -453,9 +461,12 @@ func NewMetrics(procName string) *Metrics {
 // SetPeerScores updates the peer score [prometheus.GaugeVec].
 // This takes a map of labels to scores.
 func (m *Metrics) SetPeerScores(scores map[string]float64) {
-	for label, score := range scores {
-		m.PeerScores.WithLabelValues(label).Set(score)
-	}
+	m.PeerScoreHistogram.Replace(func(h *prometheus.HistogramVec) {
+		for label, score := range scores {
+			m.PeerScores.WithLabelValues(label).Set(score)
+			h.WithLabelValues("total").Observe(score)
+		}
+	})
 }
 
 // RecordInfo sets a pseudo-metric that contains versioning and
