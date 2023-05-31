@@ -9,8 +9,11 @@ import (
 )
 
 var (
-	supportedL2OutputVersion  = eth.Bytes32{}
-	ErrInvalidBlockNumber     = errors.New("invalid block number")
+	// supportedL2OutputVersion is the version of the L2 output that the challenger supports.
+	supportedL2OutputVersion = eth.Bytes32{}
+	// ErrInvalidBlockNumber is returned when the block number of the output does not match the expected block number.
+	ErrInvalidBlockNumber = errors.New("invalid block number")
+	// ErrUnsupportedL2OOVersion is returned when the output version is not supported.
 	ErrUnsupportedL2OOVersion = errors.New("unsupported l2oo version")
 )
 
