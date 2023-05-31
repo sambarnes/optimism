@@ -9,12 +9,12 @@ import (
 
 	"github.com/ethereum/go-ethereum/log"
 
-	challenger "github.com/ethereum-optimism/optimism/op-challenger/challenger"
-	config "github.com/ethereum-optimism/optimism/op-challenger/config"
-	metrics "github.com/ethereum-optimism/optimism/op-challenger/metrics"
+	"github.com/ethereum-optimism/optimism/op-challenger/challenger"
+	"github.com/ethereum-optimism/optimism/op-challenger/config"
+	"github.com/ethereum-optimism/optimism/op-challenger/metrics"
 
-	oppprof "github.com/ethereum-optimism/optimism/op-service/pprof"
-	oprpc "github.com/ethereum-optimism/optimism/op-service/rpc"
+	"github.com/ethereum-optimism/optimism/op-service/pprof"
+	"github.com/ethereum-optimism/optimism/op-service/rpc"
 )
 
 // Main is the entrypoint into the Challenger. This method executes the
@@ -47,7 +47,7 @@ func Main(logger log.Logger, version string, cfg *config.Config) error {
 	if pprofConfig.Enabled {
 		logger.Info("starting pprof", "addr", pprofConfig.ListenAddr, "port", pprofConfig.ListenPort)
 		go func() {
-			if err := oppprof.ListenAndServe(ctx, pprofConfig.ListenAddr, pprofConfig.ListenPort); err != nil {
+			if err := pprof.ListenAndServe(ctx, pprofConfig.ListenAddr, pprofConfig.ListenPort); err != nil {
 				logger.Error("error starting pprof", "err", err)
 			}
 		}()
@@ -65,7 +65,7 @@ func Main(logger log.Logger, version string, cfg *config.Config) error {
 	}
 
 	rpcCfg := cfg.RPCConfig
-	server := oprpc.NewServer(rpcCfg.ListenAddr, rpcCfg.ListenPort, version, oprpc.WithLogger(logger))
+	server := rpc.NewServer(rpcCfg.ListenAddr, rpcCfg.ListenPort, version, rpc.WithLogger(logger))
 	if err := server.Start(); err != nil {
 		cancel()
 		return fmt.Errorf("error starting RPC server: %w", err)
